@@ -38,11 +38,16 @@ agent can start it as often as it likes.
 `wudo.exe` is a **thin client**: it does not implement any part of the privilege
 boundary, it only speaks HTTP/WebSocket to `127.0.0.1`.
 
-## Download
+## Install from a release
 
-Grab `wudoinstall.exe` from the [releases page](https://github.com/italoalmeida0/wudo/releases)
-(choose `arm64` for Windows on ARM, `amd64` for Intel/AMD) and run it. Building
-from source is described [below](#building-from-source).
+Download `wudo-amd64.zip` (Intel/AMD) or `wudo-arm64.zip` (Windows on ARM) from the
+[releases page](https://github.com/italoalmeida0/wudo/releases), unpack it and run
+`wudoinstall.exe`. Building from source is described
+[below](#building-from-source).
+
+> The binaries are not code signed, so SmartScreen may warn about an unknown
+> publisher on a machine that has never seen them. *More info → Run anyway*, or
+> build them yourself from this repository.
 
 ## Requirements
 
