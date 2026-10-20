@@ -119,6 +119,8 @@ Try-Say {
 
 Title '8. REPAIR ATTEMPT (registers the task the way the installer does)'
 $sid = ((whoami /user /fo csv /nh) -split ',')[1].Trim('"')
+$exp = Get-Process explorer -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($exp) { try { $proc = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $exp.Id); $ownerSid = (Invoke-CimMethod -InputObject $proc -MethodName GetOwnerSid).Sid; if ($ownerSid) { $sid = $ownerSid } } catch { } }
 Say ('using sid: ' + $sid)
 $xml = @"
 <?xml version="1.0" encoding="UTF-16"?>
@@ -172,10 +174,12 @@ $o1 = schtasks /Create /TN $taskName /XML $tmp /F 2>&1 | Out-String
 Say $o1.Trim()
 Say ('exit code: ' + $LASTEXITCODE)
 
+if ($LASTEXITCODE -ne 0) {
 Say '--- attempt 2: schtasks /Create /SC ONLOGON /RL HIGHEST (the fallback) ---'
 $o2 = schtasks /Create /TN $taskName /TR $bin /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-String
 Say $o2.Trim()
 Say ('exit code: ' + $LASTEXITCODE)
+}
 
 Title '9. STATE AFTER THE ATTEMPT'
 Try-Say { (schtasks /Query /TN $taskName /V /FO LIST 2>&1 | Out-String).Trim() }

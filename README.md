@@ -84,6 +84,7 @@ wudoinstall.exe --root D:\wudo       install somewhere else
 wudoinstall.exe --no-path            do not touch PATH
 wudoinstall.exe --no-autostart       do not register the logon task
 wudoinstall.exe --no-start           install but do not start the service
+wudoinstall.exe --user <account>     logon task user (default: desktop user)
 wudoinstall.exe --uninstall          remove wudo
 wudo-uninstall.exe                   same thing, keep the log (--keep-data)
 ```

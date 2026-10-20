@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/italoalmeida0/wudo/internal/state"
 	"github.com/italoalmeida0/wudo/internal/winproc"
@@ -44,6 +45,10 @@ type Options struct {
 	// through the scheduled task, which is the only way to start it elevated
 	// without another UAC prompt.
 	StartNow bool
+	// TaskUser optionally specifies the user account or SID that owns the logon
+	// task. When empty, it defaults to the interactive desktop session user (or the
+	// invoking user).
+	TaskUser string
 	// Print receives human readable progress lines.
 	Print func(format string, args ...any)
 }
@@ -128,7 +133,7 @@ func Install(opts Options) (*Result, error) {
 	}
 
 	if !opts.SkipAutostart {
-		if err := RegisterTask(filepath.Join(opts.BinDir, ServiceName)); err != nil {
+		if err := RegisterTaskForUser(filepath.Join(opts.BinDir, ServiceName), opts.TaskUser); err != nil {
 			return nil, fmt.Errorf("register the logon task: %w", err)
 		}
 		opts.Printf("registered the logon task %q (runs elevated, no UAC prompt)", TaskName)
@@ -139,8 +144,22 @@ func Install(opts Options) (*Result, error) {
 			opts.Printf("warning: the service did not start automatically: %v", err)
 			opts.Printf("start it from Task Scheduler, or run %s as administrator", filepath.Join(opts.BinDir, ServiceName))
 		} else {
-			res.Started = true
-			opts.Printf("started the wudo service")
+			// schtasks /Run triggers asynchronously; verify whether the service process actually came up.
+			started := false
+			for i := 0; i < 20; i++ {
+				time.Sleep(150 * time.Millisecond)
+				if ServiceRunning(opts.BinDir) {
+					started = true
+					break
+				}
+			}
+			if started {
+				res.Started = true
+				opts.Printf("started the wudo service")
+			} else {
+				opts.Printf("warning: the logon task was triggered, but the service did not start")
+				opts.Printf("start it from Task Scheduler, or run %s as administrator", filepath.Join(opts.BinDir, ServiceName))
+			}
 		}
 	}
 	return res, nil

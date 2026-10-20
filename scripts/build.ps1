@@ -102,18 +102,23 @@ try {
     # console window. This is what makes it start invisibly at logon.
     & go build -trimpath -ldflags "$ldflags -H windowsgui" -o (Join-Path $OutDir 'wudosvc.exe') './cmd/wudosvc'
     if ($LASTEXITCODE -ne 0) { throw 'build wudosvc.exe failed' }
+    # The uninstaller is built without embedded payloads, which avoids dropper
+    # heuristics and false positives from antivirus software.
+    & go build -trimpath -ldflags $ldflags -o (Join-Path $OutDir 'wudo-uninstall.exe') './cmd/wudoinstall'
+    if ($LASTEXITCODE -ne 0) { throw 'build wudo-uninstall.exe failed' }
 
-    # 2) stage them as the installer payload, then build the installer
-    $payload = 'cmd\wudoinstall\payload'
-    New-Item -ItemType Directory -Force -Path $payload | Out-Null
-    Copy-Item (Join-Path $OutDir 'wudo.exe') $payload -Force
-    Copy-Item (Join-Path $OutDir 'wudosvc.exe') $payload -Force
+    # 2) stage them as a compressed installer payload, then build the installer.
+    # Compressing the payload prevents antivirus false positives (dropper heuristics).
+    $payloadDir = 'cmd\wudoinstall\payload'
+    New-Item -ItemType Directory -Force -Path $payloadDir | Out-Null
+    $zipPath = Join-Path $payloadDir 'payload.zip'
+    Compress-Archive -Path (Join-Path $OutDir 'wudo.exe'), (Join-Path $OutDir 'wudosvc.exe'), (Join-Path $OutDir 'wudo-uninstall.exe') -DestinationPath $zipPath -Force
     & go build -tags wudo_installer -trimpath -ldflags $ldflags -o (Join-Path $OutDir 'wudoinstall.exe') './cmd/wudoinstall'
     if ($LASTEXITCODE -ne 0) { throw 'build wudoinstall.exe failed' }
 
     # The payload is a build artefact; leaving it behind would make every later
     # build of another architecture embed the wrong binaries.
-    Remove-Item $payload -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $payloadDir -Recurse -Force -ErrorAction SilentlyContinue
 
     Get-ChildItem $OutDir -Filter '*.exe' | Sort-Object Name | ForEach-Object {
         Write-Host ("  {0,-18} {1,12:N0} bytes" -f $_.Name, $_.Length)

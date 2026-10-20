@@ -24,10 +24,9 @@ import (
 	"github.com/italoalmeida0/wudo/internal/winproc"
 )
 
-// payloadNames are the binaries the installer carries. The uninstaller is a copy
-// of the installer itself (it understands --uninstall), so a single file is
-// enough to ship.
-var payloadNames = []string{setup.ClientName, setup.ServiceName}
+// payloadNames are the binaries the installer carries. The uninstaller is built
+// without embedded payloads so that antivirus heuristics do not flag it as a dropper.
+var payloadNames = []string{setup.ClientName, setup.ServiceName, setup.UninstallerName}
 
 const usage = `wudo installer
 
@@ -43,6 +42,7 @@ Usage:
 
 Options:
       --root <dir>     install folder (default C:\wudo)
+      --user <user>    account name or SID for the logon task (default: desktop user)
       --no-path        do not modify the machine PATH
       --no-autostart   do not register the logon task
       --no-start       do not start the service after installing
@@ -73,6 +73,7 @@ type options struct {
 	keepData    bool
 	help        bool
 	showVersion bool
+	taskUser    string
 }
 
 func run(args []string, defaultUninstall bool) int {
@@ -107,6 +108,7 @@ func run(args []string, defaultUninstall bool) int {
 		SkipPath:      opt.noPath,
 		SkipAutostart: opt.noAutostart,
 		StartNow:      !opt.noStart,
+		TaskUser:      opt.taskUser,
 		Print:         printf,
 	}
 
@@ -127,18 +129,22 @@ func run(args []string, defaultUninstall bool) int {
 		fmt.Fprintf(os.Stderr, "wudoinstall: %v\n", err)
 		return 1
 	}
-	// The uninstaller is this very executable, copied next to the binaries.
-	self, err := os.Executable()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "wudoinstall: cannot read my own path: %v\n", err)
-		return 1
+	// In builds where wudo-uninstall.exe was staged separately, payload already
+	// contains it without embedded nested binaries. For backwards compatibility,
+	// fall back to selfBytes if it was not included in payload.
+	if _, ok := payload[setup.UninstallerName]; !ok {
+		self, err := os.Executable()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "wudoinstall: cannot read my own path: %v\n", err)
+			return 1
+		}
+		selfBytes, err := os.ReadFile(self)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "wudoinstall: cannot read %s: %v\n", self, err)
+			return 1
+		}
+		payload[setup.UninstallerName] = selfBytes
 	}
-	selfBytes, err := os.ReadFile(self)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "wudoinstall: cannot read %s: %v\n", self, err)
-		return 1
-	}
-	payload[setup.UninstallerName] = selfBytes
 	opts.Payload = payload
 
 	fmt.Printf("wudo installer %s\n", version.Short())
@@ -213,6 +219,7 @@ func parse(args []string, defaultUninstall bool) (*options, error) {
 	fs := flag.NewFlagSet("wudoinstall", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&opt.root, "root", state.DirPath, "install folder")
+	fs.StringVar(&opt.taskUser, "user", "", "user account or SID to own the logon task")
 	fs.BoolVar(&opt.noPath, "no-path", false, "do not modify PATH")
 	fs.BoolVar(&opt.noAutostart, "no-autostart", false, "do not register the logon task")
 	fs.BoolVar(&opt.noStart, "no-start", false, "do not start the service")

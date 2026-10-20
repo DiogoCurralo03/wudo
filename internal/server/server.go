@@ -133,6 +133,7 @@ func (s *Server) Start() error {
 		Instance: s.instance,
 		Version:  version.Short(),
 		User:     winproc.CurrentUser(),
+		Elevated: winproc.IsElevated(),
 		Started:  s.started,
 	}
 	if err := state.WriteEndpoint(ep); err != nil {

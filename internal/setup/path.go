@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -168,15 +169,19 @@ func broadcastEnvironmentChange() { broadcastSettingChange("Environment") }
 // elevated directly. There is no consent prompt because nothing is elevated at
 // launch time - the task was created with the consent the installer already had.
 func RegisterTask(servicePath string) error {
+	return RegisterTaskForUser(servicePath, "")
+}
+
+// RegisterTaskForUser makes the service start with Windows for the given user,
+// already elevated and without asking for UAC consent. When targetUser is empty,
+// it targets the interactive desktop session user, falling back to the caller.
+func RegisterTaskForUser(servicePath, targetUser string) error {
 	servicePath = cleanDir(servicePath)
 	if servicePath == "" {
 		return errors.New("no service path")
 	}
-	// Preferred: a full task definition. It pins the principal to the account
-	// running the installer with an interactive token and the highest run level,
-	// which is exactly the "elevated tray application" combination and needs no
-	// password.
-	xmlErr := registerTaskFromXML(servicePath)
+	sid := resolveTaskUserSID(targetUser)
+	xmlErr := registerTaskFromXML(servicePath, sid)
 	if xmlErr == nil {
 		if err := verifyTask(servicePath); err == nil {
 			return nil
@@ -221,9 +226,9 @@ func verifyTask(servicePath string) error {
 }
 
 // registerTaskFromXML imports the XML definition staged in the temp folder.
-func registerTaskFromXML(servicePath string) error {
+func registerTaskFromXML(servicePath, sid string) error {
 	// schtasks reads UTF-16 when the file starts with a BOM.
-	if err := os.WriteFile(taskXMLPath(), encodeUTF16LE(taskXML(servicePath)), 0o644); err != nil {
+	if err := os.WriteFile(taskXMLPath(), encodeUTF16LE(taskXML(servicePath, sid)), 0o644); err != nil {
 		return err
 	}
 	defer os.Remove(taskXMLPath())
@@ -275,11 +280,16 @@ func taskXMLPath() string { return filepath.Join(os.TempDir(), "wudo-task.xml") 
 
 // taskXML builds the Task Scheduler definition.
 //
-// LogonType InteractiveToken with the invoking user's SID means "run in that
+// LogonType InteractiveToken with the target user's SID means "run in that
 // user's session", which is what a tray icon needs. At logon the same task
 // starts the service for the user who is logging in.
-func taskXML(servicePath string) string {
-	sid := currentUserSID()
+func taskXML(servicePath string, targetSID ...string) string {
+	sid := ""
+	if len(targetSID) > 0 && targetSID[0] != "" {
+		sid = targetSID[0]
+	} else {
+		sid = resolveTaskUserSID("")
+	}
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -345,4 +355,59 @@ func currentUserSID() string {
 		return ""
 	}
 	return tu.User.Sid.String()
+}
+
+// interactiveUserSID returns the SID of the desktop user in the current Windows
+// session by checking the owner of explorer.exe. This detects the real logged-in
+// user when the installer was launched through Over-The-Shoulder UAC elevation
+// with a separate administrator account.
+func interactiveUserSID() string {
+	var sessionID uint32
+	if err := windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &sessionID); err != nil {
+		return ""
+	}
+	pids, err := processesNamed("explorer.exe")
+	if err != nil {
+		return ""
+	}
+	for _, pid := range pids {
+		var sID uint32
+		if err := windows.ProcessIdToSessionId(pid, &sID); err != nil || sID != sessionID {
+			continue
+		}
+		h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+		if err != nil {
+			continue
+		}
+		var token windows.Token
+		err = windows.OpenProcessToken(h, windows.TOKEN_QUERY, &token)
+		windows.CloseHandle(h)
+		if err != nil {
+			continue
+		}
+		tu, err := token.GetTokenUser()
+		token.Close()
+		if err != nil || tu == nil || tu.User.Sid == nil {
+			continue
+		}
+		return tu.User.Sid.String()
+	}
+	return ""
+}
+
+// resolveTaskUserSID determines which account should own the logon task.
+func resolveTaskUserSID(targetUser string) string {
+	targetUser = strings.TrimSpace(targetUser)
+	if targetUser != "" {
+		if strings.HasPrefix(strings.ToUpper(targetUser), "S-1-") {
+			return targetUser
+		}
+		if u, err := user.Lookup(targetUser); err == nil && u.Uid != "" {
+			return u.Uid
+		}
+	}
+	if sid := interactiveUserSID(); sid != "" {
+		return sid
+	}
+	return currentUserSID()
 }
