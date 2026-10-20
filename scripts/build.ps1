@@ -80,7 +80,11 @@ try {
         if ($LASTEXITCODE -ne 0) { throw ("rsrc failed for {0}" -f $t.Exe) }
     }
 
-    $version = '0.1.0'
+    $version = (& git describe --tags --abbrev=0 2>$null | Out-String).Trim()
+    if ($version) { $version = $version.TrimStart('v') }
+    if (-not $version) {
+        $version = (Select-String -Path 'internal\version\version.go' -Pattern 'Version = "([^"]+)"').Matches[0].Groups[1].Value
+    }
     $commit = 'dev'
     if (Test-Path (Join-Path $root '.git')) {
         $commit = (& git rev-parse --short HEAD 2>$null | Out-String).Trim()

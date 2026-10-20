@@ -9,7 +9,7 @@ import (
 // These values can be overridden at build time with -ldflags "-X".
 var (
 	// Version is the semantic version of the wudo binaries.
-	Version = "0.1.0"
+	Version = "0.1.1"
 	// Commit is the short git commit the binary was built from.
 	Commit = "dev"
 	// BuildDate is the date the binary was built.
