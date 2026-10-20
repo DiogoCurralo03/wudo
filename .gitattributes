@@ -1,0 +1,14 @@
+# Go and PowerShell sources keep LF in the repository; the build scripts work
+# with either, and LF keeps diffs readable from Linux tooling.
+* text=auto eol=lf
+
+# Windows resources must stay byte-exact.
+*.ico binary
+*.syso binary
+*.exe binary
+
+# Windows scripts are the exception: PowerShell is happiest with CRLF when a
+# user double clicks them.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf

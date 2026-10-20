@@ -1,0 +1,8 @@
+# build output
+/bin/
+
+# installer payload (staged by scripts/build.ps1)
+/cmd/wudoinstall/payload/
+
+# local scratch
+*.log
