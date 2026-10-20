@@ -104,6 +104,21 @@ func TestInstallReplacesRunningBinaries(t *testing.T) {
 	}
 }
 
+// TestVerifyTaskRejectsMissingTask checks that a create which silently did nothing
+// is reported as a failure. The task name used by the tests does not exist.
+func TestVerifyTaskRejectsMissingTask(t *testing.T) {
+	if TaskExists() {
+		t.Skip("a real wudo-service task is registered on this machine")
+	}
+	err := verifyTask(`C:\wudo\bin\wudosvc.exe`)
+	if err == nil {
+		t.Fatal("verifyTask accepted a task that does not exist")
+	}
+	if !strings.Contains(err.Error(), "not registered") {
+		t.Errorf("error = %v, want it to say the task is not registered", err)
+	}
+}
+
 // TestInstallNeedsEveryBinary checks the payload validation.
 func TestInstallNeedsEveryBinary(t *testing.T) {
 	allowElevated(t)

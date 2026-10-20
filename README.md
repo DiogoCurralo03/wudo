@@ -373,6 +373,7 @@ The three PowerShell scripts exercise the actual binaries:
 | `smoke.ps1` | inactive gate, exit codes, stdout/stderr split, TTY, stdin, cwd, `npm.cmd`, five concurrent commands, a long command surviving a short one, timeout |
 | `disconnect.ps1` | killing the client kills its command; killing the service makes the client exit; no orphans left |
 | `install-test.ps1` | install into a temporary folder, install twice, then uninstall with the installed uninstaller |
+| `diagnose-task.ps1` | why the logon task is missing, and registers it again for the account that is logged on |
 
 The service cannot be started from a non elevated shell because of its
 `requireAdministrator` manifest, so the scripts build a manifest-less copy for the
@@ -391,6 +392,7 @@ privileges.
 | A command is stuck | Press `Ctrl+C` twice, or deactivate the service: the job object takes the whole process tree down. |
 | `Another wudo service is already running` | A second copy was started. Use the tray icon of the first one. |
 | The service does not start at logon | Check the task: `schtasks /Query /TN wudo-service /V /FO LIST`. Re-register it with `wudoinstall.exe --no-path`. |
+| The task is missing although the installer said it was created | Usually a **different account**: when the UAC prompt is answered by another administrator (or by a Microsoft account different from the desktop one), the task is registered for *that* account and never fires for yours. Run `scripts\diagnose-task.ps1` (or `wudo powershell -File C:\wudo\bin\diagnose-task.ps1`) - it prints "my sid" next to "task sid" and re-registers the task for the account that is logged on. |
 | `wudo` is not found in a new terminal | The `PATH` change needs a new shell. The installer broadcasts the change; if the terminal was already open, open another one. |
 | The uninstaller says "will be deleted at the next restart" | A command was still running from `C:\wudo\bin`. Windows deletes the file at the next boot. |
 

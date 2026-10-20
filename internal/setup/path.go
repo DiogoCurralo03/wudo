@@ -178,12 +178,44 @@ func RegisterTask(servicePath string) error {
 	// password.
 	xmlErr := registerTaskFromXML(servicePath)
 	if xmlErr == nil {
-		return nil
+		if err := verifyTask(servicePath); err == nil {
+			return nil
+		} else {
+			xmlErr = err
+		}
 	}
 	// Fallback: let schtasks build the definition. It is less precise but always
 	// produces something the Task Scheduler accepts.
 	if err := registerTaskFromFlags(servicePath); err != nil {
 		return fmt.Errorf("%v (task definition also rejected: %v)", err, xmlErr)
+	}
+	// A create that reports success but leaves nothing behind is a real failure
+	// mode on machines with a task cleaner, a restrictive policy or a redirected
+	// task store, and it must not be reported as a successful install.
+	if err := verifyTask(servicePath); err != nil {
+		return fmt.Errorf("%v (task definition also rejected: %v)", err, xmlErr)
+	}
+	return nil
+}
+
+// verifyTask reads the definition back and checks that the task really exists and
+// points at the service with the highest run level. schtasks is happy to exit 0
+// without creating anything on some hardened machines, so the installer must
+// check instead of trusting the exit code.
+func verifyTask(servicePath string) error {
+	if !TaskExists() {
+		return errors.New("the task was not registered")
+	}
+	out, err := runTaskScheduler("/Query", "/TN", TaskName, "/XML")
+	if err != nil {
+		return fmt.Errorf("the task cannot be read back: %v", err)
+	}
+	lower := strings.ToLower(out)
+	if !strings.Contains(lower, strings.ToLower(servicePath)) {
+		return fmt.Errorf("the task does not start %s", servicePath)
+	}
+	if !strings.Contains(lower, "highestavailable") {
+		return errors.New("the task was registered without the highest run level, so commands would not be elevated")
 	}
 	return nil
 }

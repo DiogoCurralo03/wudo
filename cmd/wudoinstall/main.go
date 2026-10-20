@@ -165,6 +165,7 @@ func run(args []string, defaultUninstall bool) int {
 	}
 	if res.TaskName != "" {
 		fmt.Printf("  logon:   task %q starts the service elevated, with no UAC prompt\n", res.TaskName)
+		fmt.Printf("           verify with: schtasks /Query /TN %s /V /FO LIST\n", res.TaskName)
 	}
 	fmt.Println()
 	if res.Started {
