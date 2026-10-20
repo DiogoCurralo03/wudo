@@ -14,7 +14,7 @@
 
 param(
     [string]$Arch   = $env:GOARCH,
-    [string]$OutDir = $env:GOARCH,
+    [string]$OutDir = '',
     [switch]$NoElevationManifest
 )
 
@@ -27,6 +27,9 @@ try {
     $env:GOARCH = $Arch
     $env:CGO_ENABLED = '0'
 
+    # The output folder follows the architecture unless one is given. It must not
+    # come from $env:GOARCH: this script sets that variable, so a second call in
+    # the same session would otherwise inherit the previous architecture.
     if (-not $OutDir) { $OutDir = $Arch }
     # A relative folder is placed under bin\, an absolute one is used as is.
     if ([System.IO.Path]::IsPathRooted($OutDir)) {
